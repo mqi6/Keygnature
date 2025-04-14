@@ -1,0 +1,32 @@
+# configs/config.yaml
+experiment:
+  name: "dual_stream_transformer_auth"
+  seed: 42
+
+data:
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+  segment_duration: 10     # seconds per segment
+  sample_rate_mouse: 100   # if downsampling from 1000Hz, use 100Hz sampling
+  sample_rate_keyboard: 1000
+  max_mouse_len: 1000      # maximum number of mouse events per segment
+  max_key_len: 500         # maximum number of keyboard events per segment
+
+model:
+  embed_dim: 128
+  n_layers: 4
+  n_heads: 8
+  dropout: 0.1
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  n_epochs: 50
+  margin: 1.0
+  log_interval: 50
+  checkpoint_interval: 5
+  use_triplet: true
+
+logging:
+  log_dir: "experiments/logs"
+  checkpoint_dir: "experiments/checkpoints"
