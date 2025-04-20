@@ -1,4 +1,4 @@
-from parse_logs import parse_log
+from .parse_logs import parse_log
 
 def compute_mouse_velocity(mouse_events):
     """

@@ -8,6 +8,7 @@ from preprocess.dataset import SessionDataset
 from models.dual_transformer import DualStreamModel
 from utils.config import load_config
 from utils.logger import Logger
+from tqdm import tqdm  # <-- import tqdm
 
 def main(args):
     # Load configuration.
@@ -61,19 +62,19 @@ def main(args):
     global_step = 0
     for epoch in range(1, n_epochs + 1):
         epoch_loss = 0.0
-        for batch_idx, batch in enumerate(dataloader):
+        # Wrap the dataloader with tqdm for a progress bar.
+        progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc=f"Epoch {epoch}")
+        for batch_idx, batch in progress_bar:
             x_mouse = batch["mouse"].to(device)       # [batch, seq_len, 5]
             x_keyboard = batch["keyboard"].to(device)   # [batch, seq_len, 4]
-            # In a practical scenario, you would generate triplets by mining examples 
-            # with the same player for anchor/positive and a different player for negative.
-            # Here, as a simple demonstration, we require that the first two samples in a batch 
-            # come from the same player, and the third from a different one.
+            # For demonstration, this example uses the first three samples as the triplet.
             batch_size = x_mouse.size(0)
             if batch_size < 3:
                 continue
             
             embeddings = model(x_mouse, x_keyboard)  # shape: [batch, embed_dim]
             player_ids = batch["player_id"]
+            # Ensure first two belong to the same player and third to a different one.
             if player_ids[0] != player_ids[1] or player_ids[0] == player_ids[2]:
                 continue  # Skip batch if conditions are not met
             
@@ -88,6 +89,10 @@ def main(args):
             
             epoch_loss += loss.item()
             global_step += 1
+            
+            # Update progress bar with loss info.
+            progress_bar.set_postfix(loss=loss.item())
+            
             if global_step % log_interval == 0:
                 logger.log("Epoch: {}, Step: {}, Loss: {:.4f}".format(epoch, global_step, loss.item()))
         
@@ -110,6 +115,7 @@ def main(args):
     logger.log("Training completed.")
 
 if __name__ == "__main__":
+    import argparse
     parser = argparse.ArgumentParser(description="Train Dual-Stream Transformer for Behavioral Authentication")
     parser.add_argument("--config", type=str, default="configs/config.yaml", help="Path to config file")
     args = parser.parse_args()

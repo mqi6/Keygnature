@@ -24,11 +24,22 @@ def load_model(checkpoint_path, device):
     return model, config
 
 def compute_embedding(model, sample, device):
-    mouse = sample["mouse"].unsqueeze(0).to(device)
-    keyboard = sample["keyboard"].unsqueeze(0).to(device)
+    # sample["mouse"] could be [seq,feat] (test_file) or [1,seq,feat] (DataLoader)
+    mouse = sample["mouse"].to(device)
+    keyboard = sample["keyboard"].to(device)
+
+    # Ensure batch dimension
+    if mouse.dim() == 2:
+        mouse = mouse.unsqueeze(0)       # [1, seq_len, feat]
+    if keyboard.dim() == 2:
+        keyboard = keyboard.unsqueeze(0)
+
     with torch.no_grad():
-        embedding = model(mouse, keyboard)
-    return embedding.squeeze(0)
+        emb = model(mouse, keyboard)     # [1, embed_dim]
+
+    return emb.squeeze(0)               # → [embed_dim]
+
+
 
 def cosine_similarity(a, b):
     return F.cosine_similarity(a.unsqueeze(0), b.unsqueeze(0)).item()

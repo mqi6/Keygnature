@@ -1,0 +1,5 @@
+numpy>=1.19.0
+torch>=1.8.0
+pyyaml>=5.3.1
+tqdm>=4.60.0
+pynput>=1.7.5

@@ -5,18 +5,23 @@ def parse_log(file_path):
     Parse the CSV log file and return two lists: keyboard_events and mouse_events.
     Each event is a dictionary with:
       - timestamp: float
-      - For mouse events: event (e.g., "move", "left") and optional action, x, y.
+      - For mouse events: event (e.g., "move", specific button) and optional action, x, y.
       - For keyboard events: key (e.g., "y") and action ("press"/"release").
     """
     keyboard_events = []
     mouse_events = []
     with open(file_path, 'r') as csvfile:
         reader = csv.reader(csvfile)
-        # Expected row format: timestamp, device, event/key, action, x, y, ...
+        header = next(reader, None)  # skip header if present
         for row in reader:
             if not row or len(row) < 4:
                 continue
-            timestamp = float(row[0])
+            # Skip any row where the first entry is non-numeric (header row)
+            try:
+                timestamp = float(row[0])
+            except ValueError:
+                continue
+
             device = row[1].strip().lower()
             if device == "mouse":
                 event = row[2].strip().lower()

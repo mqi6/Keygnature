@@ -129,7 +129,7 @@ def stop_recording():
         except Exception:
             pass
         mouse_listener = None
-    if duration_ms >= 10 * 60 * 1000:
+    if duration_ms >= 1 * 60 * 1000:
         # Update session counter for this user
         session_counters[username] = session_counters.get(username, 0) + 1
         current_session = session_counters[username]
@@ -140,7 +140,7 @@ def stop_recording():
         except Exception as e:
             print(f"Warning: Failed to update session file: {e}")
         # Save CSV data to file
-        filename = f"{username}-{current_session}.csv"
+        filename = f"{username}_{current_session}.csv"
         filepath = os.path.join(save_dir, filename)
         try:
             with open(filepath, "w", encoding="utf-8") as f:
