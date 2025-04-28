@@ -5,12 +5,14 @@ experiment:
 
 data:
   raw_data_dir: "data/raw"
+  raw_zip: "data/raw/aalto136Mkeystroke.zip"
   processed_data_dir: "data/processed"
   segment_duration: 10     # seconds per segment
   sample_rate_mouse: 100   # if downsampling from 1000Hz, use 100Hz sampling
   sample_rate_keyboard: 1000
   max_mouse_len: 1000      # maximum number of mouse events per segment
   max_key_len: 500         # maximum number of keyboard events per segment
+  keystroke_sequence_len: 100
 
 model:
   embed_dim: 128
@@ -30,3 +32,17 @@ training:
 logging:
   log_dir: "experiments/logs"
   checkpoint_dir: "experiments/checkpoints"
+
+hyperparams:
+  batch_size:
+    aalto: 64
+  epoch_batch_count:
+    aalto: 100
+  keystroke_feature_count:
+    aalto: 10
+  target_len: 64
+  learning_rate: 0.001
+  number_of_enrollment_sessions:
+    aalto: 10
+  number_of_verify_sessions:
+    aalto: 5
