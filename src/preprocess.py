@@ -13,7 +13,9 @@ PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 if __name__ == "__main__":
     print("=== Preprocessing Started ===")
     t0 = time.time()
-
+    
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    
     # 1) Unzip raw archive
     if not RAW_ZIP.exists():
         raise FileNotFoundError(f"Place your ZIP at {RAW_ZIP!s}")
@@ -27,7 +29,7 @@ if __name__ == "__main__":
 
     # 2) Locate keystroke txt files
     txt_files = list(EXTRACT_DIR.rglob("*_keystrokes.txt"))
-    #txt_files = txt_files[:2000]   # ← only keep the first 2000 files
+    txt_files = txt_files[:10000]   # ← only keep the first 2000 files
     print(f"[{time.time()-t0:.2f}s] Found {len(txt_files)} keystroke files")
 
     # 3) Read & concatenate
