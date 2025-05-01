@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     # 2) Locate keystroke txt files
     txt_files = list(EXTRACT_DIR.rglob("*_keystrokes.txt"))
-    txt_files = txt_files[:10000]   # ← only keep the first 2000 files
+    txt_files = txt_files[:200]   # ← only keep the first 2000 files
     print(f"[{time.time()-t0:.2f}s] Found {len(txt_files)} keystroke files")
 
     # 3) Read & concatenate

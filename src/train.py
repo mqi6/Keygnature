@@ -23,11 +23,12 @@ with open(CONFIG_PATH, "r") as f:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 cudnn.benchmark = True
 
+# ─── Optional preprocess (if not run separately) ─────────────────────────────────
 def preprocess():
-    """Run preprocess.py to generate train/val/test pickles."""
     script = Path(__file__).parent / "preprocess.py"
     subprocess.run(f"python {script}", shell=True, check=True)
 
+# ─── Datasets and Loss ───────────────────────────────────────────────────────────
 class TrainDataset(Dataset):
     def __init__(self, data, batch_size, epoch_batches, seq_len):
         self.data    = data
@@ -90,8 +91,9 @@ class TripletLoss(torch.nn.Module):
         dn = (a - n).pow(2).sum(dim=1).sqrt()
         return torch.relu(dp - dn + self.margin).mean()
 
+# ─── Feature extraction utility ──────────────────────────────────────────────────
 def extract_features(dataset):
-    """Append timing features (10 dims) to each [T×3] sequence."""
+    """Append keystroke timing features (10 dims) to each [T×3] sequence."""
     for user in dataset:
         for i, seq in enumerate(user):
             arr = np.array(seq, dtype=np.float32)
@@ -119,19 +121,20 @@ def extract_features(dataset):
                 arr[j,9] = code /255
             user[i] = arr
 
+# ─── Main training loop ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("epochs", type=int, help="number of epochs")
     parser.add_argument("--resume", help="checkpoint to resume from")
     args = parser.parse_args()
 
-    # 1) Preprocess
-    #preprocess()
+    # 1) Preprocess (optional)
+    # preprocess()
 
-    # 2) Load data
-    with open("data/processed/training_data.pickle","rb") as f:
+    # 2) Load pickles
+    with open("data/processed/training_data.pickle", "rb") as f:
         train_data = pickle.load(f)
-    with open("data/processed/validation_data.pickle","rb") as f:
+    with open("data/processed/validation_data.pickle", "rb") as f:
         val_data   = pickle.load(f)
 
     # 3) Feature extraction
@@ -139,22 +142,23 @@ if __name__ == "__main__":
     extract_features(val_data)
 
     # 4) Hyperparams
-    bs = cfg["hyperparams"]["batch_size"]["aalto"]
-    eb = cfg["hyperparams"]["epoch_batch_count"]["aalto"]
-    sl = cfg["data"]["keystroke_sequence_len"]
-    fc = cfg["hyperparams"]["keystroke_feature_count"]["aalto"]
-    tl = cfg["hyperparams"]["target_len"]
-    lr = cfg["hyperparams"]["learning_rate"]
-    ne = cfg["hyperparams"]["number_of_enrollment_sessions"]["aalto"]
-    nv = cfg["hyperparams"]["number_of_verify_sessions"]["aalto"]
+    bs     = cfg["hyperparams"]["batch_size"]["aalto"]
+    eb     = cfg["hyperparams"]["epoch_batch_count"]["aalto"]
+    sl     = cfg["data"]["keystroke_sequence_len"]
+    fc     = cfg["hyperparams"]["keystroke_feature_count"]["aalto"]
+    tl     = cfg["hyperparams"]["target_len"]
+    lr     = cfg["hyperparams"]["learning_rate"]
+    ne     = cfg["hyperparams"]["number_of_enrollment_sessions"]["aalto"]
+    nv     = cfg["hyperparams"]["number_of_verify_sessions"]["aalto"]
+    margin = cfg.get("training", {}).get("margin", 1.0)
 
-    # 5) Dataloaders
+    # 5) DataLoaders
     train_dl = DataLoader(TrainDataset(train_data, bs, eb, sl), batch_size=bs, shuffle=True)
     val_dl   = DataLoader(ValidationDataset(val_data, sl), batch_size=bs, shuffle=False)
 
     # 6) Model, loss, optimizer
     model   = KeystrokeTransformer(6, fc, 20, 5, 10, sl, tl, 0.1).to(device)
-    loss_fn = TripletLoss()
+    loss_fn = TripletLoss(margin=margin)
     optim   = torch.optim.Adam(model.parameters(), lr=lr)
 
     best_eer = math.inf
@@ -163,8 +167,8 @@ if __name__ == "__main__":
     # 7) Resume if requested
     if args.resume:
         ckpt = torch.load(args.resume, map_location=device)
-        model.load_state_dict(    ckpt["model_state_dict"])
-        optim.load_state_dict(    ckpt["optimizer_state_dict"])
+        model.load_state_dict(ckpt["model_state_dict"])
+        optim.load_state_dict(ckpt["optimizer_state_dict"])
         best_eer = ckpt.get("best_eer", best_eer)
         start_ep = ckpt.get("epoch", start_ep-1) + 1
         print(f"Resumed from epoch {start_ep-1}, best EER={best_eer:.2f}%")
@@ -172,42 +176,67 @@ if __name__ == "__main__":
     out_dir = Path("best_models")
     out_dir.mkdir(exist_ok=True)
 
-    # 8) Training loop
+    # 8) Training loop with NaN & grad checks
     for ep in range(start_ep, args.epochs+1):
         t0 = time.time()
         model.train()
         total_loss = 0.0
+        first_loss = last_loss = None
 
-        for A, P, N in train_dl:
+        for batch_idx, (A, P, N) in enumerate(train_dl):
             A, P, N = A.to(device), P.to(device), N.to(device)
             optim.zero_grad()
-            loss = loss_fn(model(A), model(P), model(N))
+            # forward + NaN guard
+            out = model(A)
+            if torch.isnan(out).any():
+                raise RuntimeError("NaN detected in model output!")
+            loss = loss_fn(out, model(P), model(N))
             loss.backward()
+            # grad-norm check
+            total_norm = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    total_norm += p.grad.data.norm(2).item()**2
+            total_norm = total_norm**0.5
+            if math.isnan(total_norm) or total_norm > 1e6:
+                raise RuntimeError("Gradient explosion or NaN!")
             optim.step()
+
             total_loss += loss.item()
+            if batch_idx == 0:
+                first_loss = loss.item()
+            if batch_idx == len(train_dl)-1:
+                last_loss = loss.item()
 
         avg_loss = total_loss / len(train_dl)
+        print(f"    ▸ first batch loss: {first_loss:.4f}, last batch loss: {last_loss:.4f}")
 
-        # 9) Validation
+        # log emb stats
+        with torch.no_grad():
+            emb_stats = model(A)
+            print(f"    ▸ emb mean={emb_stats.mean():.4f}, std={emb_stats.std():.4f}")
+
+        # 9) Validation + EER
         model.eval()
         embs = []
         with torch.no_grad():
             for batch in val_dl:
                 embs.append(model(batch.to(device)))
         sessions = len(val_data[0])
-        emb = torch.cat(embs, 0).view(len(val_data), sessions, tl)
-        eer, _ = Metric.cal_user_eer_aalto(emb, ne, nv)
-        dt = time.time() - t0
+        feats = torch.cat(embs, 0).view(len(val_data), sessions, tl)
+        eer, th = Metric.cal_user_eer_aalto(feats, ne, nv)
+        print(f"    ▸ thr={th:.4f}")
 
+        dt = time.time() - t0
         print(f"Epoch {ep}/{args.epochs}  Loss={avg_loss:.4f}  EER={eer:.2f}%  {dt:.1f}s")
 
         if eer < best_eer:
             best_eer = eer
             ckpt_path = out_dir / f"checkpoint_ep{ep}_eer{eer:.2f}.pth"
             torch.save({
-                "epoch":                ep,
-                "model_state_dict":     model.state_dict(),
+                "epoch": ep,
+                "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optim.state_dict(),
-                "best_eer":             best_eer
+                "best_eer": best_eer
             }, ckpt_path)
             print(f" ➔ saved best ({best_eer:.2f}%) at {ckpt_path}")

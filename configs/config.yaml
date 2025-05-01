@@ -12,7 +12,7 @@ data:
   sample_rate_keyboard: 1000
   max_mouse_len: 1000      # maximum number of mouse events per segment
   max_key_len: 500         # maximum number of keyboard events per segment
-  keystroke_sequence_len: 100
+  keystroke_sequence_len: 50
 
 model:
   embed_dim: 128
@@ -24,7 +24,7 @@ training:
   batch_size: 32
   learning_rate: 0.001
   n_epochs: 50
-  margin: 1.0
+  margin: 0.2
   log_interval: 50
   checkpoint_interval: 5
   use_triplet: true
@@ -35,9 +35,9 @@ logging:
 
 hyperparams:
   batch_size:
-    aalto: 64
+    aalto: 1024
   epoch_batch_count:
-    aalto: 100
+    aalto: 29
   keystroke_feature_count:
     aalto: 10
   target_len: 64
